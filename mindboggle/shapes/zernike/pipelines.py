@@ -1,22 +1,16 @@
 from __future__ import division
 
+import logging
+
 import numpy as np
 import scipy
 from scipy.special import (factorial,
-                        comb as nchoosek,
-                        )
+                           comb as nchoosek,
+                           )
 
 from mindboggle.shapes.zernike.helpers import nest, autocat
 
-import logging
 LOG = logging.getLogger(__name__)
-
-#import decorator
-
-#@decorator.decorator
-#def logcall(fn, *args, **dargs):
-#    LOG.debug(fn.__name__)
-#    return fn(*args, **dargs)
 
 IMAG_CONST = scipy.sqrt(-1)
 PI_CONST = np.pi
@@ -67,7 +61,7 @@ class SerialPipeline(Pipeline):
                             lambda _i, _j: range(N - _i - _j + 1),
                             ):
             c[i, j, k] = tri_array[i, j, k] * \
-                np.power(x, i) * np.power(y, j) * np.power(z, k)
+                         np.power(x, i) * np.power(y, j) * np.power(z, k)
         return c
 
     def term_Sijk(self, Cf_list, N):
@@ -121,7 +115,7 @@ class SerialPipeline(Pipeline):
                                    lambda _a, _b, _c: range(_a + _c + 1),
                                    ):
             V[a, b, c] += np.power(IMAG_CONST, alpha) * \
-                nchoosek(a + c, alpha) * G[2 * a + c - alpha, alpha, b]
+                          nchoosek(a + c, alpha) * G[2 * a + c - alpha, alpha, b]
 
         W = np.zeros([N + 1, N + 1, N + 1], dtype=complex)
         for a, b, c, alpha in nest(lambda: range(int(N / 2) + 1),
@@ -130,7 +124,7 @@ class SerialPipeline(Pipeline):
                                    lambda _a, _b, _c: range(_a + 1),
                                    ):
             W[a, b, c] += np.power(-1, alpha) * np.power(2, a - alpha) * \
-                nchoosek(a, alpha) * V[a - alpha, b, c + 2 * alpha]
+                          nchoosek(a, alpha) * V[a - alpha, b, c + 2 * alpha]
 
         X = np.zeros([N + 1, N + 1, N + 1], dtype=complex)
         for a, b, c, alpha in nest(lambda: range(int(N / 2) + 1),
@@ -159,7 +153,7 @@ class SerialPipeline(Pipeline):
             # integer required for k when used as power in Qklnu below:
             k = int((n - l) / 2)
             Z[n, l, m] += (3 / (4 * PI_CONST)) * \
-                self.Qklnu(k, l, nu) * np.conj(Y[l, nu, m])
+                          self.Qklnu(k, l, nu) * np.conj(Y[l, nu, m])
 
         for n, l, m in nest(lambda: range(N + 1),
                             lambda _n: range(n + 1),
@@ -170,7 +164,7 @@ class SerialPipeline(Pipeline):
                     Z[n, l, m]) - np.imag(Z[n, l, m]) * IMAG_CONST
             else:
                 Z[n, l, m] = -np.real(Z[n, l, m]) + \
-                    np.imag(Z[n, l, m]) * IMAG_CONST
+                             np.imag(Z[n, l, m]) * IMAG_CONST
 
         return Z
 
@@ -207,6 +201,7 @@ class SerialPipeline(Pipeline):
         F = F.transpose()
         return F[F >= 0]
 
+
 import multiprocessing as mp
 
 
@@ -221,12 +216,12 @@ def _mp_mon_comb_worker(pipeline, *args, **dargs):
 
 class MultiprocPipeline(SerialPipeline):
 
-    def geometric_moments_exact(self, points_array, faces_array, N):
+    def geometric_moments_exact(self, points_array, faces_array, N, max_workers=None):
         n_facets, n_vertices = faces_array.shape[:2]
         assert n_vertices == 3
         moments_array = np.zeros([N + 1, N + 1, N + 1])
         monomial_array = self.monomial_precalc(points_array, N)
-        process_pool = mp.Pool()
+        process_pool = mp.Pool(processes=max_workers)
         for face in faces_array:
             vertex_list = [points_array[_i, ...] for _i in face]
             monomial_list = [monomial_array[_i, ...] for _i in face]
@@ -238,16 +233,18 @@ class MultiprocPipeline(SerialPipeline):
         process_pool.join()
         return self.factorial_scalar(N) * moments_array
 
-    def monomial_precalc(self, points_array, N):
+    def monomial_precalc(self, points_array, N, max_workers=None):
         n_points = points_array.shape[0]
         monomial_array = np.zeros([n_points, N + 1, N + 1, N + 1])
         tri_array = self.trinomial_precalc(N)
-        process_pool = mp.Pool()
+        process_pool = mp.Pool(processes=max_workers)
         for point_indx, point in enumerate(points_array):
             def get_callback(_i):
                 def __callback(result):
                     monomial_array[_i, ...] = result
+
                 return __callback
+
             process_pool.apply_async(_mp_mon_comb_worker,
                                      args=(self, point, tri_array, N),
                                      callback=get_callback(point_indx),
@@ -255,6 +252,7 @@ class MultiprocPipeline(SerialPipeline):
         process_pool.close()
         process_pool.join()
         return monomial_array
+
 
 import itertools as it
 
@@ -295,12 +293,13 @@ class NumpyOptimizations(Pipeline):
         x, y, z = vertex
         return tri_array * (x ** i) * (y ** j) * (z ** k)
 
+
 class KoehlOptimizations(Pipeline):
 
     def geometric_moments_exact(self, points_array, faces_array, N):
         n_facets, n_vertices = faces_array.shape[:2]
         assert n_vertices == 3
-        moments_array = np.zeros([N+1, N+1, N+1])
+        moments_array = np.zeros([N + 1, N + 1, N + 1])
         for face in faces_array:
             vertex_list = [points_array[_i, ...] for _i in face]
             moments_array += self.facet_contribution(vertex_list, N)
@@ -310,7 +309,7 @@ class KoehlOptimizations(Pipeline):
         Vf = self.facet_volume(vertex_list)
         Cf = self.term_Cijk(vertex_list[2], N)
         Df = self.term_Dijk(vertex_list[1], N, Cf)
-        return Vf*self.term_Sijk(vertex_list[0], N, Df)
+        return Vf * self.term_Sijk(vertex_list[0], N, Df)
 
     def term_Cijk(self, vertex, N):
         return self.work_loop(vertex, N)
@@ -324,31 +323,33 @@ class KoehlOptimizations(Pipeline):
     def work_loop(self, vertex, N, prev=None):
         R = prev
         if R is None:
-            R = np.zeros([N+1, N+1, N+1])
-        Q = np.zeros([N+1, N+1, N+1])
+            R = np.zeros([N + 1, N + 1, N + 1])
+        Q = np.zeros([N + 1, N + 1, N + 1])
         Q[0, 0, 0] = 1.0
 
         recursion_term = lambda _X, x_y_z, mask: \
-            np.roll(_X, 1, axis=0)[mask]*x_y_z[0] + \
-            np.roll(_X, 1, axis=1)[mask]*x_y_z[1] + \
-            np.roll(_X, 1, axis=2)[mask]*x_y_z[2]
-        i, j, k = np.mgrid[:N+1, :N+1, :N+1]
-        order = (i+j+k)
+            np.roll(_X, 1, axis=0)[mask] * x_y_z[0] + \
+            np.roll(_X, 1, axis=1)[mask] * x_y_z[1] + \
+            np.roll(_X, 1, axis=2)[mask] * x_y_z[2]
+        i, j, k = np.mgrid[:N + 1, :N + 1, :N + 1]
+        order = (i + j + k)
         for n in range(N):
-            mask = (order==n+1)
+            mask = (order == n + 1)
             _Q = recursion_term(Q, vertex, mask)
             Q[mask] = _Q + R[mask]
         return Q
 
+
 def _kmp_geometric_moments_exact_worker(self, vertex_list, N):
     return self.facet_contribution(vertex_list, N)
 
+
 class KoehlMultiproc(KoehlOptimizations):
-    def geometric_moments_exact(self, points_array, faces_array, N):
+    def geometric_moments_exact(self, points_array, faces_array, N, max_workers=None):
         n_facets, n_vertices = faces_array.shape[:2]
         assert n_vertices == 3
-        moments_array = np.zeros([N+1, N+1, N+1])
-        process_pool = mp.Pool()
+        moments_array = np.zeros([N + 1, N + 1, N + 1])
+        process_pool = mp.Pool(processes=max_workers)
         for face in faces_array:
             vertex_list = [points_array[_i, ...] for _i in face]
             process_pool.apply_async(_kmp_geometric_moments_exact_worker,
@@ -360,10 +361,12 @@ class KoehlMultiproc(KoehlOptimizations):
         return self.factorial_scalar(N) * moments_array
 
 
-#DefaultPipeline = type('DefaultPipeline', (SerialPipeline,), {})
-#DefaultPipeline = type(
+# DefaultPipeline = type('DefaultPipeline', (SerialPipeline,), {})
+# DefaultPipeline = type(
 #     'DefaultPipeline', (NumpyOptimizations, MultiprocPipeline,), {})
-#DefaultPipeline = type(
-#    'DefaultPipeline', (KoehlOptimizations, SerialPipeline), {})
 DefaultPipeline = type(
-    'DefaultPipeline', (KoehlMultiproc, SerialPipeline), {})
+    'DefaultPipeline', (KoehlOptimizations, SerialPipeline), {}
+)
+# DefaultPipeline = type(
+#     'DefaultPipeline', (KoehlMultiproc, SerialPipeline), {}
+# )

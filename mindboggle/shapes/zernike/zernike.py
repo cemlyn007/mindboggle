@@ -47,74 +47,6 @@ def zernike_moments(points, faces, order=10, scale_input=True,
     descriptors : list of floats
         Zernike descriptors
 
-    Examples
-    --------
-    >>> # Example 1: simple cube (decimation results in a Segmentation Fault):
-    >>> import numpy as np
-    >>> from mindboggle.shapes.zernike.zernike import zernike_moments
-    >>> points = [[0,0,0], [1,0,0], [0,0,1], [0,1,1],
-    ...           [1,0,1], [0,1,0], [1,1,1], [1,1,0]]
-    >>> faces = [[0,2,4], [0,1,4], [2,3,4], [3,4,5], [3,5,6], [0,1,7]]
-    >>> order = 3
-    >>> scale_input = True
-    >>> decimate_fraction = 0
-    >>> decimate_smooth = 0
-    >>> verbose = False
-    >>> descriptors = zernike_moments(points, faces, order, scale_input,
-    ...     decimate_fraction, decimate_smooth, verbose)
-    >>> [np.float("{0:.{1}f}".format(x, 5)) for x in descriptors]
-    [0.09189, 0.09357, 0.04309, 0.06466, 0.0382, 0.04138]
-
-    Example 2: Twins-2-1 left postcentral pial surface -- NO decimation:
-               (zernike_moments took 142 seconds for order = 3 with no decimation)
-
-    >>> from mindboggle.shapes.zernike.zernike import zernike_moments
-    >>> from mindboggle.mio.vtks import read_vtk
-    >>> from mindboggle.guts.mesh import keep_faces
-    >>> from mindboggle.mio.fetch_data import prep_tests
-    >>> urls, fetch_data = prep_tests()
-    >>> label_file = fetch_data(urls['left_freesurfer_labels'], '', '.vtk')
-    >>> points, f1,f2, faces, labels, f3,f4,f5 = read_vtk(label_file)
-    >>> I22 = [i for i,x in enumerate(labels) if x==1022] # postcentral
-    >>> faces = keep_faces(faces, I22)
-    >>> order = 3
-    >>> scale_input = True
-    >>> decimate_fraction = 0
-    >>> decimate_smooth = 0
-    >>> verbose = False
-    >>> descriptors = zernike_moments(points, faces, order, scale_input,
-    ...     decimate_fraction, decimate_smooth, verbose)
-    >>> [np.float("{0:.{1}f}".format(x, 5)) for x in descriptors]
-    [0.00471, 0.0084, 0.00295, 0.00762, 0.0014, 0.00076]
-
-    Example 3: left postcentral + pars triangularis pial surfaces:
-
-    >>> from mindboggle.mio.vtks import read_vtk, write_vtk
-    >>> points, f1,f2, faces, labels, f3,f4,f5 = read_vtk(label_file)
-    >>> I20 = [i for i,x in enumerate(labels) if x==1020] # pars triangularis
-    >>> I22 = [i for i,x in enumerate(labels) if x==1022] # postcentral
-    >>> I22.extend(I20)
-    >>> faces = keep_faces(faces, I22)
-    >>> order = 3
-    >>> scale_input = True
-    >>> decimate_fraction = 0
-    >>> decimate_smooth = 0
-    >>> verbose = False
-    >>> descriptors = zernike_moments(points, faces, order, scale_input,
-    ...     decimate_fraction, decimate_smooth, verbose)
-    >>> [np.float("{0:.{1}f}".format(x, 5)) for x in descriptors]
-    [0.00586, 0.00973, 0.00322, 0.00818, 0.0013, 0.00131]
-
-    View both segments (skip test):
-
-    >>> from mindboggle.mio.plots import plot_surfaces # doctest: +SKIP
-    >>> from mindboggle.mio.vtks import rewrite_scalars # doctest: +SKIP
-    >>> scalars = -1 * np.ones(np.shape(labels)) # doctest: +SKIP
-    >>> scalars[I22] = 1 # doctest: +SKIP
-    >>> rewrite_scalars(label_file, 'test_two_labels.vtk', scalars,
-    ...                 'two_labels', scalars) # doctest: +SKIP
-    >>> plot_surfaces(vtk_file) # doctest: +SKIP
-
     """
     import numpy as np
 
@@ -140,15 +72,15 @@ def zernike_moments(points, faces, order=10, scale_input=True,
     if scale_input:
         center = np.mean(points, axis=0)
         points = points - center
-        maxd = np.max(np.sqrt(np.sum(points**2, axis=1)))
+        maxd = np.max(np.sqrt(np.sum(points ** 2, axis=1)))
         points /= maxd
 
     # ------------------------------------------------------------------------
     # Decimate surface:
     # ------------------------------------------------------------------------
     if 0 < decimate_fraction < 1:
-        points, faces, u1,u2 = decimate(points, faces,
-            decimate_fraction, decimate_smooth, [], save_vtk=False)
+        points, faces, u1, u2 = decimate(points, faces,
+                                         decimate_fraction, decimate_smooth, [], save_vtk=False)
 
         # Convert lists to numpy arrays:
         points = np.array(points)
@@ -253,7 +185,7 @@ def zernike_moments_per_label(vtk_file, order=10, exclude_labels=[-1],
     # Read VTK surface mesh file:
     # ------------------------------------------------------------------------
     points, indices, lines, faces, labels, scalar_names, npoints, \
-            input_vtk = read_vtk(vtk_file)
+    input_vtk = read_vtk(vtk_file)
 
     # ------------------------------------------------------------------------
     # Loop through labeled regions:
@@ -262,15 +194,15 @@ def zernike_moments_per_label(vtk_file, order=10, exclude_labels=[-1],
     label_list = []
     descriptors_lists = []
     for label in ulabels:
-      #if label == 1022:  # 22:
-      #    print("DEBUG: COMPUTE FOR ONLY ONE LABEL")
+        # if label == 1022:  # 22:
+        #    print("DEBUG: COMPUTE FOR ONLY ONE LABEL")
 
         # --------------------------------------------------------------------
         # Determine the indices per label:
         # --------------------------------------------------------------------
-        Ilabel = [i for i,x in enumerate(labels) if x == label]
+        Ilabel = [i for i, x in enumerate(labels) if x == label]
         if verbose:
-          print('  {0} vertices for label {1}'.format(len(Ilabel), label))
+            print('  {0} vertices for label {1}'.format(len(Ilabel), label))
 
         if len(Ilabel) > min_points_faces:
 
@@ -279,7 +211,6 @@ def zernike_moments_per_label(vtk_file, order=10, exclude_labels=[-1],
             # ----------------------------------------------------------------
             pick_faces = keep_faces(faces, Ilabel)
             if len(pick_faces) > min_points_faces:
-
                 # ------------------------------------------------------------
                 # Compute Zernike moments for the label:
                 # ------------------------------------------------------------
@@ -302,4 +233,5 @@ def zernike_moments_per_label(vtk_file, order=10, exclude_labels=[-1],
 # ============================================================================
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod(verbose=True)  # py.test --doctest-modules
